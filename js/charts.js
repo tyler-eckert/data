@@ -122,13 +122,14 @@
     const ents = o.entries;
     if (!ents.length) { host.innerHTML = '<div class="empty">No entries in this range yet</div>'; return; }
     if (o.type === 'calendar') return calendar(host, o, W);
+    if (o.type === 'monthcal') return monthCal(host, o, W);
     if (o.type === 'histogram') return histogram(host, o, W, Ht);
     if (o.type === 'number') return bigNumber(host, o, W);
     return timeChart(host, o, W, Ht);
   }
 
   function axesY(svg, ticks, y, x0, x1, dec) {
-    const st = Math.abs(ticks[1] - ticks[0]), dd = st >= 1 && st % 1 === 0 ? 0 : st * 10 % 1 === 0 || Math.abs(st * 10 - Math.round(st * 10)) < 1e-9 ? 1 : 2;
+    const mi = Math.max(1, Math.floor(ticks.length / 2)), st = Math.abs(ticks[mi] - ticks[mi - 1]), dd = st >= 1 && st % 1 === 0 ? 0 : st * 10 % 1 === 0 || Math.abs(st * 10 - Math.round(st * 10)) < 1e-9 ? 1 : 2;
     for (const v of ticks) {
       el('line', { x1: x0, x2: x1, y1: y(v), y2: y(v), class: v === 0 ? 'gl gl0' : 'gl' }, svg);
       el('text', { x: x0 - 8, y: y(v) + 3.5, 'text-anchor': 'end' }, svg).textContent = fmt(v, dd);
@@ -159,7 +160,13 @@
     let lo = Math.min(...vs), hi = Math.max(...vs);
     if (['bar', 'cumulative'].includes(type)) { lo = Math.min(0, lo); hi = Math.max(0, hi); }
     else { const pad = (hi - lo) * .08 || Math.abs(hi) * .05 || 1; lo -= pad; hi += pad; }
-    const yt = niceTicks(lo, hi, Math.max(3, Math.round(ph / 45)));
+    const fixLo = o.ymin != null && isFinite(o.ymin), fixHi = o.ymax != null && isFinite(o.ymax);
+    if (fixLo) lo = +o.ymin; if (fixHi) hi = +o.ymax;
+    if (hi <= lo) { if (fixHi && !fixLo) lo = hi - (Math.abs(hi) || 1); else hi = lo + (Math.abs(lo) || 1); }
+    let yt = niceTicks(lo, hi, Math.max(3, Math.round(ph / 45)));
+    const stp = yt[1] - yt[0];
+    if (fixLo) yt = [lo, ...yt.filter(v => v > lo + stp * .35)];
+    if (fixHi) yt = [...yt.filter(v => v < hi - stp * .35), hi];
     const y0v = yt[0], y1v = yt[yt.length - 1];
     const x = t => P.l + (t - t0) / (t1 - t0) * pw;
     const y = v => P.t + ph - (v - y0v) / (y1v - y0v) * ph;
@@ -167,7 +174,9 @@
     axesY(svg, yt, y, P.l, W - P.r, o.decimals);
     axesX(svg, timeTicks(t0, t1, Math.max(2, Math.floor(pw / 70))), x, P.t, P.t + ph);
 
-    const g = el('g', {}, svg);
+    const cid = 'cp' + Math.random().toString(36).slice(2, 8);
+    el('rect', { x: P.l - 6, y: P.t - 6, width: pw + 12, height: ph + 12 }, el('clipPath', { id: cid }, el('defs', {}, svg)));
+    const g = el('g', { 'clip-path': `url(#${cid})` }, svg);
     const base = y(Math.max(y0v, Math.min(0, y1v)));
     const line = (step) => pts.map((p, i) => {
       const X = x(p.t).toFixed(1), Y = y(p.v).toFixed(1);
@@ -232,7 +241,7 @@
     const L = 28, T = 18, cell = Math.max(6, Math.min(weeks <= 14 ? 26 : 18, Math.floor((W - L - 4) / weeks) - 2)), gap = 2;
     const Ht = T + 7 * (cell + gap) + 4;
     const svg = svgRoot(host, Math.max(W, L + weeks * (cell + gap)), Ht);
-    const max = Math.max(...days.map(d => d.v), 0) || 1, min = Math.min(0, ...days.map(d => d.v));
+    const max = o.ymax != null && isFinite(o.ymax) ? +o.ymax : (Math.max(...days.map(d => d.v), 0) || 1), min = o.ymin != null && isFinite(o.ymin) ? +o.ymin : Math.min(0, ...days.map(d => d.v));
     ['Mon', '', 'Wed', '', 'Fri', '', ''].forEach((l, i) => l && (el('text', { x: 0, y: T + i * (cell + gap) + cell - 2 }, svg).textContent = l));
     let lastMonth = -1;
     const d = new Date(start);
@@ -242,7 +251,7 @@
         if (t > end) continue;
         if (r === 0) { const m = new Date(t).getMonth(); if (m !== lastMonth && new Date(t).getDate() <= 7) { lastMonth = m; el('text', { x: L + w * (cell + gap), y: 11 }, svg).textContent = MON[m]; } }
         const p = map.get(t);
-        const op = p ? .18 + .82 * ((p.v - min) / ((max - min) || 1)) : 1;
+        const op = p ? .18 + .82 * Math.max(0, Math.min(1, (p.v - min) / ((max - min) || 1))) : 1;
         const rc = el('rect', { x: L + w * (cell + gap), y: T + r * (cell + gap), width: cell, height: cell, rx: Math.min(3, cell / 4),
           fill: p ? o.color : 'var(--surface-3)', 'fill-opacity': op.toFixed(2) }, svg);
         const html = `<div class="t">${mdy(t)}</div>` + (p ? `<div class="r"><span class="sw" style="background:${o.color}"></span><b class="num">${fmt(p.v, o.decimals)}${o.unit && agg !== 'count' ? ' ' + esc(o.unit) : ''}</b></div>${p.n > 1 ? `<div class="n">${p.n} entries</div>` : ''}` : '<div class="r muted">No entry</div>');
@@ -296,6 +305,47 @@
     const svg = el('svg', { viewBox: `0 0 ${w} ${h}`, width: w, height: h, style: 'margin-top:14px;max-width:100%' }, sp);
     const d = pts.map((p, i) => `${i ? 'L' : 'M'}${((p.t - t0) / (t1 - t0) * (w - 4) + 2).toFixed(1)},${(h - 4 - (p.v - lo) / ((hi - lo) || 1) * (h - 8)).toFixed(1)}`).join('');
     el('path', { d, fill: 'none', stroke: o.color, 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+  }
+
+  // real month-grid calendar (Sun–Sat), most recent month first
+  function monthCal(host, o, W) {
+    host.style.overflowX = '';
+    const agg = o.agg, days = bucketize(o.entries, 'day', agg), map = new Map(days.map(d => [d.t0, d]));
+    const vs = days.map(d => d.v);
+    const max = o.ymax != null && isFinite(o.ymax) ? +o.ymax : Math.max(...vs, 0) || 1;
+    const min = o.ymin != null && isFinite(o.ymin) ? +o.ymin : Math.min(0, ...vs);
+    const endT = o.t1 ?? Date.now(), startT = o.t0 ?? o.entries[0].t;
+    const end = new Date(endT), months = [];
+    for (let d = new Date(end.getFullYear(), end.getMonth(), 1); d.getTime() >= new Date(new Date(startT).getFullYear(), new Date(startT).getMonth(), 1).getTime() && months.length < 12; d.setMonth(d.getMonth() - 1)) months.push(new Date(d));
+    const today = bStart(Date.now(), 'day'), MONF = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const cols = Math.max(1, Math.min(months.length, Math.floor((W + 16) / 200)));
+    const cell = (W - (cols - 1) * 16) / cols / 7;
+    const showVal = cell >= 27, u = o.unit && agg !== 'count' ? ' ' + esc(o.unit) : '';
+    let h = `<div class="mcal-wrap${showVal && cell < 40 ? ' compact' : ''}" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">`;
+    for (const m of months) {
+      const y = m.getFullYear(), mo = m.getMonth(), first = m.getDay(), n = new Date(y, mo + 1, 0).getDate();
+      h += `<div class="mcal"><div class="mcal-h">${MONF[mo]} ${y}</div><div class="mcal-g">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(x => `<span class="dow">${x}</span>`).join('')}`;
+      for (let i = 0; i < first; i++) h += '<span></span>';
+      for (let dd = 1; dd <= n; dd++) {
+        const t = new Date(y, mo, dd).getTime(), p = map.get(t);
+        const out = (o.t0 != null && t < bStart(o.t0, 'day')) || t > endT;
+        let st = '', cls = 'd' + (t === today ? ' today' : '') + (out ? ' out' : '');
+        if (p) {
+          const k = Math.max(0, Math.min(1, (p.v - min) / ((max - min) || 1))), pct = Math.round(22 + 78 * k);
+          st = `background:color-mix(in srgb,${o.color} ${pct}%,var(--surface));` + (pct > 55 ? 'color:#fff;' : '');
+          cls += ' has';
+        }
+        h += `<div class="${cls}" style="${st}" data-t="${t}"><i>${dd}</i>${p && showVal ? `<b class="num">${fmt(p.v, o.decimals)}</b>` : ''}</div>`;
+      }
+      h += '</div></div>';
+    }
+    host.innerHTML = h + '</div>';
+    host.querySelectorAll('.d').forEach(c => {
+      const t = +c.dataset.t, p = map.get(t);
+      const html = `<div class="t">${mdy(t)}</div>` + (p ? `<div class="r"><span class="sw" style="background:${o.color}"></span><b class="num">${fmt(p.v, o.decimals)}${u}</b></div>${p.n > 1 ? `<div class="n">${p.n} entries</div>` : ''}` : '<div class="r muted">No entry</div>');
+      c.addEventListener('mousemove', ev => showTip(ev, html)); c.addEventListener('mouseleave', hideTip);
+      c.addEventListener('touchstart', ev => showTip(ev, html), { passive: true });
+    });
   }
 
   window.Charts = { render, aggregate, bucketize, fmt, mdy, md, hm, esc };

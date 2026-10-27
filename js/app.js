@@ -17,6 +17,7 @@
     ['dots', 'Scatter', '<circle cx="6" cy="15" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="14" cy="13" r="1.6" fill="currentColor"/><circle cx="18" cy="6" r="1.6" fill="currentColor"/>'],
     ['cumulative', 'Running total', '<path d="M3 20h18"/><path d="M4 18c6-1 10-5 16-13"/><path d="M15 5h5v5"/>'],
     ['calendar', 'Calendar heatmap', '<rect x="3.5" y="3.5" width="5" height="5" rx="1"/><rect x="9.5" y="3.5" width="5" height="5" rx="1" fill="currentColor"/><rect x="15.5" y="3.5" width="5" height="5" rx="1"/><rect x="3.5" y="9.5" width="5" height="5" rx="1" fill="currentColor"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="15.5" y="9.5" width="5" height="5" rx="1" fill="currentColor"/><rect x="3.5" y="15.5" width="5" height="5" rx="1"/><rect x="9.5" y="15.5" width="5" height="5" rx="1" fill="currentColor"/>'],
+    ['monthcal', 'Monthly calendar', '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><rect x="6.5" y="12.5" width="3" height="2.5" rx=".5" fill="currentColor" stroke="none"/><rect x="10.5" y="12.5" width="3" height="2.5" rx=".5" fill="currentColor" stroke="none"/><rect x="14.5" y="16" width="3" height="2.5" rx=".5" fill="currentColor" stroke="none"/>'],
     ['histogram', 'Distribution', '<path d="M3 20h18"/><rect x="4" y="13" width="4" height="7"/><rect x="8" y="6" width="4" height="14"/><rect x="12" y="9" width="4" height="11"/><rect x="16" y="15" width="4" height="5"/>'],
     ['number', 'Big number', '<path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/>'],
   ];
@@ -335,7 +336,9 @@
     const dlt = cur != null && pv ? (cur - pv) / Math.abs(pv) : null;
     const u = (a) => m.unit && a !== 'count' ? `<small>${esc(m.unit)}</small>` : '';
     const rShort = S.range === 'all' ? 'All-time' : RANGES.find(r => r[0] === S.range)[1];
-    const noBucket = ['calendar', 'histogram'].includes(c.type), noAgg = ['histogram', 'cumulative'].includes(c.type);
+    const noBucket = ['calendar', 'monthcal', 'histogram'].includes(c.type), noAgg = ['histogram', 'cumulative'].includes(c.type);
+    const isCal = ['calendar', 'monthcal'].includes(c.type), noAxis = ['histogram', 'number'].includes(c.type);
+    const hasAxis = c.ymin != null || c.ymax != null, axOpen = !noAxis && (hasAxis || axisOpen.has(m.id));
     card.innerHTML = `
       <div class="card-h"><div><h3><span class="sw" style="background:${m.color}"></span>${esc(m.name)}</h3><div class="sub">${[m.category, latest ? 'Last logged ' + ago(latest.t) : 'No entries yet'].filter(Boolean).map(esc).join(' · ')}</div></div>
         <div class="right"><button class="icon-btn" data-a="wide" title="${c.span === 12 ? 'Half width' : 'Full width'}">${IC.wide}</button><button class="icon-btn" data-a="hide" title="Hide card">${IC.hide}</button><button class="icon-btn" data-a="edit" title="Metric settings">${IC.gear}</button></div></div>
@@ -348,19 +351,28 @@
         <div class="types">${TYPES.map(t => `<button data-t="${t[0]}" title="${t[1]}" class="${c.type === t[0] ? 'on' : ''}">${svgI(t[2])}</button>`).join('')}</div>
         ${noBucket ? '' : `<div class="seg sm">${BUCKETS.map(b => `<button data-b="${b[0]}" class="${c.bucket === b[0] ? 'on' : ''}">${b[1]}</button>`).join('')}</div>`}
         ${noAgg ? '' : `<select class="in sel sm" data-agg style="width:auto">${AGGS.map(a => `<option value="${a[0]}" ${c.agg === a[0] ? 'selected' : ''}>${a[1]}</option>`).join('')}</select>`}
+        ${noAxis ? '' : `<button class="ctl-btn ${hasAxis ? 'on' : ''}" data-a="axis" title="${isCal ? 'Set the color scale' : 'Set the y-axis range'}">${svgI('<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>', 2.2)}${isCal ? 'Scale' : 'Y axis'}${hasAxis ? '' : ': auto'}</button>`}
+        ${axOpen ? `<div class="yax">${isCal ? 'Color' : 'Y'} <input class="in sm num" type="number" step="any" data-y="ymin" placeholder="Min auto" value="${c.ymin ?? ''}"><span>–</span><input class="in sm num" type="number" step="any" data-y="ymax" placeholder="Max auto" value="${c.ymax ?? ''}">${hasAxis ? '<button class="ctl-btn" data-a="auto">Auto</button>' : ''}</div>` : ''}
       </div>`;
     const host = $('.chart', card);
     Charts.render(host, { type: c.type, bucket: c.bucket, agg: c.agg, color: m.color, unit: m.unit, decimals: m.decimals,
-      entries: ents, t0, t1: t0 == null ? null : t1, height: c.span === 12 ? 260 : 220 });
+      entries: ents, ymin: c.ymin, ymax: c.ymax, t0, t1: t0 == null ? null : t1, height: c.span === 12 ? 260 : 220 });
     const set = (patch, full) => { m.chart = { ...c, ...patch }; full ? renderOverview() : renderCard(m, card); saveChart(m); };
-    $$('[data-t]', card).forEach(b => b.onclick = () => set({ type: b.dataset.t }));
+    $$('.types [data-t]', card).forEach(b => b.onclick = () => set({ type: b.dataset.t }));
     $$('[data-b]', card).forEach(b => b.onclick = () => set({ bucket: b.dataset.b }));
     const as = $('[data-agg]', card); if (as) as.onchange = () => set({ agg: as.value });
+    const ax = $('[data-a=axis]', card);
+    if (ax) ax.onclick = () => { if (axisOpen.has(m.id) && !hasAxis) axisOpen.delete(m.id); else axisOpen.add(m.id); renderCard(m, card); const i = $('[data-y=ymin]', card); if (i) i.focus(); };
+    $$('[data-y]', card).forEach(i => {
+      const apply = () => { const v = i.value.trim(); const nv = v === '' || isNaN(+v) ? null : +v; if (nv !== (c[i.dataset.y] ?? null)) { axisOpen.add(m.id); set({ [i.dataset.y]: nv }); } };
+      i.onchange = apply; i.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } };
+    });
+    const au = $('[data-a=auto]', card); if (au) au.onclick = () => { axisOpen.delete(m.id); set({ ymin: null, ymax: null }); };
     $('[data-a=wide]', card).onclick = () => set({ span: c.span === 12 ? 6 : 12 }, true);
     $('[data-a=hide]', card).onclick = () => { set({ hidden: true }, true); toast(`Hid ${esc(m.name)}`, () => set({ hidden: false }, true)); };
     $('[data-a=edit]', card).onclick = () => metricModal(m, () => renderOverview());
   }
-  const saveT = {};
+  const saveT = {}, axisOpen = new Set();
   function saveChart(m) { clearTimeout(saveT[m.id]); saveT[m.id] = setTimeout(() => guard(() => DB.saveMetric({ id: m.id, chart: m.chart })), 700); }
 
   function cardsModal() {
