@@ -16,6 +16,9 @@
       onAuth(cb) { sb.auth.onAuthStateChange((_e, s) => cb(s)); },
       async signIn(email, password) { ok(await sb.auth.signInWithPassword({ email, password })); },
       async signOut() { await sb.auth.signOut(); },
+      // small per-user display prefs (e.g. hidden summary tiles), kept in the login's metadata so they sync everywhere
+      async prefs() { const { data } = await sb.auth.getUser(); return (data.user && data.user.user_metadata && data.user.user_metadata.data_prefs) || {}; },
+      async savePrefs(p) { const { error } = await sb.auth.updateUser({ data: { data_prefs: p } }); if (error) throw error; },
       async metrics() {
         return ok(await sb.from('metrics').select('*').order('sort_order').order('name'));
       },
@@ -74,6 +77,7 @@
       demo: true,
       async session() { return { user: { email: 'demo@eckerthaus.com' } }; },
       onAuth() {}, async signIn() {}, async signOut() { location.search = ''; },
+      _p: {}, async prefs() { return this._p; }, async savePrefs(p) { this._p = JSON.parse(JSON.stringify(p)); },
       metrics: () => wait(M.slice().sort((a, b) => a.sort_order - b.sort_order)),
       entries: () => wait(E.slice().sort((a, b) => b.ts < a.ts ? -1 : 1)),
       async saveMetric(m) {

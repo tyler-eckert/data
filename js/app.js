@@ -30,6 +30,7 @@
     edit: svgI('<path d="M4 20h4L19 9l-4-4L4 16z"/>'), trash: svgI('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
     up: svgI('<path d="M12 19V5M6 11l6-6 6 6"/>'), down: svgI('<path d="M12 5v14M6 13l6 6 6-6"/>'),
     wide: svgI('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>'), hide: svgI('<path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0112 6c5 0 9 6 9 6a15 15 0 01-2.9 3.4M6.6 6.6C4.3 8.1 3 12 3 12s4 6 9 6a8.7 8.7 0 004.4-1.2"/>'),
+    eye: svgI('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
     gear: svgI('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>', 1.8),
     check: svgI('<path d="M5 12l5 5L20 7"/>', 2.4), cards: svgI('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
   };
@@ -320,13 +321,19 @@
     const rLab = S.range === 'all' ? 'all time' : 'last ' + RANGES.find(r => r[0] === S.range)[1].replace('D', ' days').replace('1Y', 'year');
     const delta = prev && prev.length ? (inR.length - prev.length) / prev.length : null;
     const spanDays = t0 ? Math.round(len / D) : (S.entries.length ? Math.max(1, Math.round((Date.now() - S.entries[S.entries.length - 1].t) / D)) : 0);
-    $('#ovKpis').innerHTML = `
-      <div class="card hero kpi c-3 kp"><div class="label">Entries · ${rLab}</div><div class="val num">${inR.length.toLocaleString()}</div>
-        <div class="delta">${delta == null ? '&nbsp;' : `<span class="chip" style="background:rgba(255,255,255,.16);color:#fff">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta * 100).toFixed(0)}%</span> vs prior period`}</div></div>
-      <div class="card kpi c-3 kp"><div class="label">Metrics with data</div><div class="val num">${new Set(inR.map(e => e.metric_id)).size}<span class="muted" style="font-size:var(--fs-lg)"> / ${S.metrics.filter(m => !m.archived).length}</span></div><div class="delta muted">${cats().length} categor${cats().length === 1 ? 'y' : 'ies'}</div></div>
-      <div class="card kpi c-3 kp"><div class="label">Days logged</div><div class="val num">${days.size}</div><div class="delta muted">${spanDays ? Math.min(100, Math.round(days.size / (spanDays + 1) * 100)) + '% of days' : '&nbsp;'}</div></div>
-      <div class="card kpi c-3 kp"><div class="label">Current streak</div><div class="val num">${streak} <span class="muted" style="font-size:var(--fs-lg)">day${streak === 1 ? '' : 's'}</span></div><div class="delta muted">${S.entries.length ? 'Last entry ' + ago(S.entries[0].t) : '&nbsp;'}</div></div>`;
-
+    const KH = kpiHidden();
+    const tiles = [
+      ['entries', `<div class="label">Entries · ${rLab}</div><div class="val num">${inR.length.toLocaleString()}</div>
+        <div class="delta">${delta == null ? '&nbsp;' : `<span class="chip" style="background:rgba(255,255,255,.16);color:#fff">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta * 100).toFixed(0)}%</span> vs prior period`}</div>`],
+      ['metrics', `<div class="label">Metrics with data</div><div class="val num">${new Set(inR.map(e => e.metric_id)).size}<span class="muted" style="font-size:var(--fs-lg)"> / ${S.metrics.filter(m => !m.archived).length}</span></div><div class="delta muted">${cats().length} categor${cats().length === 1 ? 'y' : 'ies'}</div>`],
+      ['days', `<div class="label">Days logged</div><div class="val num">${days.size}</div><div class="delta muted">${spanDays ? Math.min(100, Math.round(days.size / (spanDays + 1) * 100)) + '% of days' : '&nbsp;'}</div>`],
+      ['streak', `<div class="label">Current streak</div><div class="val num">${streak} <span class="muted" style="font-size:var(--fs-lg)">day${streak === 1 ? '' : 's'}</span></div><div class="delta muted">${S.entries.length ? 'Last entry ' + ago(S.entries[0].t) : '&nbsp;'}</div>`],
+    ].filter(([k]) => LAY.edit || !KH.includes(k));
+    const span = { 4: 3, 3: 4, 2: 6, 1: 12 }[tiles.length] || 3;
+    $('#ovKpis').hidden = $('#ovGap').hidden = !tiles.length;
+    $('#ovKpis').innerHTML = tiles.map(([k, h]) => `<div class="card kpi kp ${k === 'entries' ? 'hero' : ''} c-${span} ${tiles.length === 1 ? 'kp1' : ''} ${LAY.edit && KH.includes(k) ? 'lay-hidden' : ''}" data-kpi="${k}">${h}${LAY.edit
+      ? `<div class="lay-ctl"><button data-kh="${k}" title="${KH.includes(k) ? 'Show' : 'Hide'} this tile">${KH.includes(k) ? IC.hide : IC.eye}</button></div>` : ''}</div>`).join('');
+    $$('[data-kh]').forEach(b => b.onclick = () => toggleKpi(b.dataset.kh));
     const g = $('#ovGrid');
     document.body.classList.toggle('lay-on', LAY.edit);
     $('#layBanner')?.remove();
@@ -494,11 +501,22 @@
   const saveT = {}, axisOpen = new Set();
   function saveChart(m) { clearTimeout(saveT[m.id]); saveT[m.id] = setTimeout(() => guard(() => DB.saveMetric({ id: m.id, chart: m.chart })), 700); }
 
+  const KPIS = [['entries', 'Entries'], ['metrics', 'Metrics with data'], ['days', 'Days logged'], ['streak', 'Current streak']];
+  const kpiHidden = () => (S.prefs && S.prefs.kpiHidden) || [];
+  let prefT;
+  function toggleKpi(k) {
+    const H = kpiHidden().slice(); H.includes(k) ? H.splice(H.indexOf(k), 1) : H.push(k);
+    S.prefs = { ...(S.prefs || {}), kpiHidden: H }; renderOverview();
+    clearTimeout(prefT); prefT = setTimeout(() => guard(() => DB.savePrefs(S.prefs)), 500);
+  }
   function cardsModal() {
     const act = S.metrics.filter(m => !m.archived);
-    openModal(`<h2>Overview cards</h2><div class="muted" style="margin:-10px 0 16px;font-size:var(--fs-sm)">Choose which metrics get a card. Reorder them from the Metrics list on Data entry.</div>
+    openModal(`<h2>Overview cards</h2><div class="fl" style="margin-bottom:4px">Summary tiles</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 18px;margin-bottom:18px">${KPIS.map(([k, l]) => `<label class="check" style="padding:6px 0"><input type="checkbox" data-k="${k}" ${kpiHidden().includes(k) ? '' : 'checked'}>${l}</label>`).join('')}</div>
+      <div class="fl" style="margin-bottom:4px">Metric cards</div><div class="muted" style="margin:-10px 0 16px;font-size:var(--fs-sm)">Choose which metrics get a card. Reorder them from the Metrics list on Data entry.</div>
       <div style="display:flex;flex-direction:column;gap:4px">${act.map(m => `<label class="check" style="padding:8px 4px;border-bottom:1px solid var(--border)"><input type="checkbox" data-id="${m.id}" ${chartOf(m).hidden ? '' : 'checked'}><span class="sw" style="background:${m.color}"></span>${esc(m.name)}<span class="muted" style="margin-left:auto;font-size:var(--fs-sm)">${esc(m.category || '')}</span></label>`).join('') || '<div class="muted">No metrics yet.</div>'}</div>
       <div class="form-actions"><span class="sp"></span><button class="btn primary" id="cDone">Done</button></div>`, (el) => {
+      $$('input[data-k]', el).forEach(i => i.onchange = () => toggleKpi(i.dataset.k));
       $$('input[data-id]', el).forEach(i => i.onchange = () => { const m = mById(i.dataset.id); m.chart = { ...chartOf(m), hidden: !i.checked }; saveChart(m); renderOverview(); });
       $('#cDone', el).onclick = closeModal;
     });
@@ -511,7 +529,8 @@
 
   async function load() {
     setSync('busy', 'Loading…');
-    const [ms, es] = await Promise.all([DB.metrics(), DB.entries()]);
+    const [ms, es, pr] = await Promise.all([DB.metrics(), DB.entries(), DB.prefs().catch(() => ({}))]);
+    S.prefs = pr || {};
     S.metrics = ms.map(m => ({ ...m, decimals: m.decimals ?? 1, chart: m.chart || {} }));
     S.entries = es.map(norm); sortEntries();
     setSync('ok', DB.demo ? 'Demo mode' : 'Synced');

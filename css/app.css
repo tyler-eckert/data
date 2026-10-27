@@ -274,6 +274,7 @@ body.lay-on .tabbar{display:none}
   .top-actions .seg button{flex:1}
   .top-actions .in.sel{flex:1}
   .card.kp{grid-column:span 6}
+  .card.kp.kp1{grid-column:span 12}
   .kpi .val{font-size:var(--fs-2xl)}
   .mob-only{display:inline-flex}
   .c-3,.c-4,.c-5,.c-6,.c-7,.c-8{grid-column:span 12}
