@@ -104,10 +104,12 @@
     a.innerHTML = `<div class="seg" id="rangeSeg">${RANGES.map(r => `<button data-r="${r[0]}" class="${S.range === r[0] ? 'on' : ''}">${r[1]}</button>`).join('')}</div>`
       + (cs.length ? `<select class="in sel" id="catSel"><option value="">All categories</option>${cs.map(c => `<option ${S.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : '')
       + `<button class="btn" id="cardsBtn" title="Show or hide metric cards">${IC.cards}<span>Cards</span></button>`
+      + `<button class="btn primary" id="addBtn" title="Log a new entry">${svgI('<path d="M12 5v14M5 12h14"/>', 2.4)}<span>Add entry</span></button>`
       + `<button class="btn ${LAY.edit ? 'primary' : ''}" id="layoutBtn" title="Resize, rearrange or hide cards on this page">${svgI('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M10 9v12"/>')}<span>Layout</span></button>`;
     $$('#rangeSeg button').forEach(b => b.onclick = () => { S.range = b.dataset.r; store.set('data-range', S.range); renderTop(); renderOverview(); });
     const cSel = $('#catSel'); if (cSel) cSel.onchange = () => { S.cat = cSel.value; store.set('data-cat', S.cat); renderOverview(); };
     $('#cardsBtn').onclick = cardsModal;
+    $('#addBtn').onclick = () => entryModal(null);
     $('#layoutBtn').onclick = () => { LAY.edit = !LAY.edit; renderTop(); renderOverview(); };
   }
 
@@ -234,22 +236,30 @@
     });
   }
 
-  function entryModal(e) {
-    openModal(`<h2>Edit entry</h2><form class="form" id="xF">
+  function entryModal(e, metricId) {
+    const isNew = !e;
+    if (isNew) e = { metric_id: metricId || store.get('data-last-metric', '') || (S.metrics.find(x => !x.archived) || {}).id, t: Date.now(), v: null, notes: '' };
+    openModal(`<h2>${isNew ? 'New entry' : 'Edit entry'}</h2><form class="form" id="xF">
       <div class="full"><label>Metric</label><select class="in" id="xM">${metricOptions(e.metric_id, false)}</select></div>
-      <div><label>Value</label><input class="in num" id="xV" type="number" step="any" inputmode="decimal" value="${e.v ?? ''}" placeholder="blank = occurrence"></div>
+      <div><label>Value</label><input class="in num" id="xV" type="number" step="any" inputmode="decimal" value="${e.v ?? ''}" placeholder="blank = occurrence"><div class="muted" id="xU" style="font-size:var(--fs-xs);margin-top:4px"></div></div>
       <div><label>Timestamp</label><input class="in" id="xT" type="datetime-local" value="${toLocalInput(e.t)}"></div>
       <div class="full"><label>Notes</label><textarea class="in" id="xN" rows="3">${esc(e.notes || '')}</textarea></div></form>
-      <div class="form-actions"><button class="btn danger" id="xDel">Delete</button><span class="sp"></span><button class="btn" id="xC">Cancel</button><button class="btn primary" form="xF">Save</button></div>`, (m) => {
-      if (!mById(e.metric_id) || mById(e.metric_id).archived) $('#xM', m).insertAdjacentHTML('afterbegin', `<option value="${e.metric_id}" selected>${esc((mById(e.metric_id) || {}).name || '?')}</option>`);
+      <div class="form-actions">${isNew ? '' : '<button class="btn danger" id="xDel">Delete</button>'}<span class="sp"></span><button class="btn" id="xC">Cancel</button><button class="btn primary" form="xF">${isNew ? 'Save entry' : 'Save'}</button></div>`, (m) => {
+      if (!isNew && (!mById(e.metric_id) || mById(e.metric_id).archived)) $('#xM', m).insertAdjacentHTML('afterbegin', `<option value="${e.metric_id}" selected>${esc((mById(e.metric_id) || {}).name || '?')}</option>`);
+      const unit = () => { const mm = mById($('#xM', m).value); $('#xU', m).textContent = mm && mm.unit ? 'in ' + mm.unit : ''; };
+      $('#xM', m).onchange = unit; unit();
+      if (isNew) setTimeout(() => $('#xV', m).focus(), 80);
       $('#xC', m).onclick = closeModal;
-      $('#xDel', m).onclick = () => { closeModal(); deleteEntry(e); };
+      if (!isNew) $('#xDel', m).onclick = () => { closeModal(); deleteEntry(e); };
       $('#xF', m).onsubmit = async (ev) => {
         ev.preventDefault();
         const raw = $('#xV', m).value.trim();
+        if (raw !== '' && isNaN(+raw)) return toast('Value must be a number');
         const upd = { id: e.id, metric_id: $('#xM', m).value, ts: fromLocalInput($('#xT', m).value), value: raw === '' ? null : +raw, notes: $('#xN', m).value.trim() || null };
-        const row = await guard(() => DB.saveEntry(upd), 'Entry updated');
-        Object.assign(e, norm(row)); sortEntries(); closeModal(); rerender();
+        const mm = mById(upd.metric_id); if (!mm) return toast('Pick a metric');
+        const row = await guard(() => DB.saveEntry(upd), isNew ? `Saved ${esc(mm.name)} · ${raw === '' ? 'logged' : fmt(upd.value, mm.decimals) + (mm.unit ? ' ' + esc(mm.unit) : '')}` : 'Entry updated');
+        if (isNew) { S.entries.unshift(norm(row)); store.set('data-last-metric', mm.id); } else Object.assign(e, norm(row));
+        sortEntries(); closeModal(); rerender();
       };
     });
   }
@@ -441,15 +451,17 @@
     const noBucket = ['calendar', 'monthcal', 'histogram'].includes(c.type), noAgg = ['histogram', 'cumulative'].includes(c.type);
     const isCal = ['calendar', 'monthcal'].includes(c.type), noAxis = ['histogram', 'number'].includes(c.type);
     const hasAxis = c.ymin != null || c.ymax != null, axOpen = !noAxis && (hasAxis || axisOpen.has(m.id));
+    const ctlOpen = !!c.ctl;
+    const optSummary = [TYPES.find(t => t[0] === c.type)?.[1], noBucket ? null : BUCKETS.find(b => b[0] === c.bucket)?.[1], noAgg ? null : AGGS.find(a => a[0] === c.agg)?.[1], noAxis ? null : hasAxis ? `${isCal ? 'scale' : 'y'} ${c.ymin ?? 'auto'}–${c.ymax ?? 'auto'}` : null].filter(Boolean).join(' · ');
     card.innerHTML = `
       <div class="card-h"><div><h3><span class="sw" style="background:${m.color}"></span>${esc(m.name)}</h3><div class="sub">${[m.category, latest ? 'Last logged ' + ago(latest.t) : 'No entries yet'].filter(Boolean).map(esc).join(' · ')}</div></div>
-        <div class="right"><button class="icon-btn" data-a="hide" title="Hide card">${IC.hide}</button><button class="icon-btn" data-a="edit" title="Metric settings">${IC.gear}</button></div></div>
+        <div class="right"><button class="icon-btn add" data-a="add" title="Add a ${esc(m.name)} entry">${svgI('<path d="M12 5v14M5 12h14"/>', 2.4)}</button><button class="icon-btn ${ctlOpen ? 'on' : ''}" data-a="opts" title="${ctlOpen ? 'Hide' : 'Show'} chart options · ${esc(optSummary)}">${svgI('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>')}</button><button class="icon-btn" data-a="hide" title="Hide card">${IC.hide}</button><button class="icon-btn" data-a="edit" title="Metric settings">${IC.gear}</button></div></div>
       <div class="mc-stats">
         <div class="mc-stat"><div class="l">Latest</div><div class="v num">${latest ? (latest.v == null ? '✓' : fmt(+latest.v, m.decimals)) + (latest.v == null ? '' : u()) : '—'}</div><div class="s">${latest ? mdy(latest.t) : '&nbsp;'}</div></div>
         <div class="mc-stat"><div class="l">${rShort} ${AGG_SHORT[agg]}</div><div class="v num">${fmt(cur, agg === 'count' ? 0 : m.decimals)}${cur == null ? '' : u(agg)}</div><div class="s">${dlt == null || !isFinite(dlt) ? `${ents.length} entr${ents.length === 1 ? 'y' : 'ies'}` : `<span class="chip ${dlt >= 0 ? 'pos' : 'neg'}">${dlt >= 0 ? '▲' : '▼'} ${Math.abs(dlt * 100).toFixed(1)}%</span> vs prior`}</div></div>
       </div>
       <div class="chart"></div>
-      <div class="mc-ctl">
+      <div class="mc-ctl" ${ctlOpen ? '' : 'hidden'}>
         <div class="types">${TYPES.map(t => `<button data-t="${t[0]}" title="${t[1]}" class="${c.type === t[0] ? 'on' : ''}">${svgI(t[2])}</button>`).join('')}</div>
         ${noBucket ? '' : `<div class="seg sm">${BUCKETS.map(b => `<button data-b="${b[0]}" class="${c.bucket === b[0] ? 'on' : ''}">${b[1]}</button>`).join('')}</div>`}
         ${noAgg ? '' : `<select class="in sel sm" data-agg style="width:auto">${AGGS.map(a => `<option value="${a[0]}" ${c.agg === a[0] ? 'selected' : ''}>${a[1]}</option>`).join('')}</select>`}
@@ -476,6 +488,8 @@
     const au = $('[data-a=auto]', card); if (au) au.onclick = () => { axisOpen.delete(m.id); set({ ymin: null, ymax: null }); };
     $('[data-a=hide]', card).onclick = () => { set({ hidden: true }, true); toast(`Hid ${esc(m.name)}`, () => set({ hidden: false }, true)); };
     $('[data-a=edit]', card).onclick = () => metricModal(m, () => renderOverview());
+    $('[data-a=add]', card).onclick = () => entryModal(null, m.id);
+    $('[data-a=opts]', card).onclick = () => set({ ctl: !ctlOpen });
   }
   const saveT = {}, axisOpen = new Set();
   function saveChart(m) { clearTimeout(saveT[m.id]); saveT[m.id] = setTimeout(() => guard(() => DB.saveMetric({ id: m.id, chart: m.chart })), 700); }

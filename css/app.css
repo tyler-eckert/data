@@ -78,6 +78,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .icon-btn{width:30px;height:30px;border-radius:var(--r-sm);display:inline-grid;place-items:center;color:var(--text-3)}
 .icon-btn:hover{background:var(--surface-3);color:var(--text)}
 .icon-btn svg{width:15px;height:15px}
+.icon-btn.on{background:var(--brand-100);color:var(--brand-500)}
+.icon-btn.add{color:var(--brand-500)}
+.icon-btn.add:hover{background:var(--brand-100);color:var(--brand-500)}
 .seg{display:inline-flex;background:var(--surface-3);border-radius:var(--r-pill);padding:3px;gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
 .seg::-webkit-scrollbar{display:none}
 .seg button{padding:6px 14px;border-radius:var(--r-pill);font-size:var(--fs-sm);font-weight:600;color:var(--text-3);white-space:nowrap}
@@ -144,6 +147,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .mcal-wrap.compact .d.has i{display:none}
 .mcal-wrap.compact .d b{margin-top:0}
 .mcal-g .d.has{border-color:transparent}
+.mcal-wrap.compact .d.zero i{display:none}
+.mcal-g .d.zero b{color:var(--text-2)}
 .mcal-g .d.today{box-shadow:inset 0 0 0 2px var(--text)}
 .mcal-g .d.out{opacity:.4}
 .yax{display:flex;gap:6px;align-items:center;font-size:var(--fs-xs);color:var(--text-3);font-weight:600}

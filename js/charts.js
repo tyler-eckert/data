@@ -257,9 +257,10 @@
         if (t > end) continue;
         if (r === 0) { const m = new Date(t).getMonth(); if (m !== lastMonth && new Date(t).getDate() <= 7) { lastMonth = m; el('text', { x: L + w * (cell + gap), y: 11 }, svg).textContent = MON[m]; } }
         const p = map.get(t);
-        const op = p ? .18 + .82 * Math.max(0, Math.min(1, (p.v - min) / ((max - min) || 1))) : 1;
-        const rc = el('rect', { x: L + w * (cell + gap), y: T + r * (cell + gap), width: cell, height: cell, rx: Math.min(3, cell / 4),
-          fill: p ? o.color : 'var(--surface-3)', 'fill-opacity': op.toFixed(2) }, svg);
+        const zero = p && p.v === 0;   // a logged zero: outlined, not shaded like an event
+        const op = p && !zero ? .18 + .82 * Math.max(0, Math.min(1, (p.v - min) / ((max - min) || 1))) : 1;
+        const rc = el('rect', { x: L + w * (cell + gap) + (zero ? .75 : 0), y: T + r * (cell + gap) + (zero ? .75 : 0), width: cell - (zero ? 1.5 : 0), height: cell - (zero ? 1.5 : 0), rx: Math.min(3, cell / 4),
+          fill: zero ? 'var(--surface)' : p ? o.color : 'var(--surface-3)', 'fill-opacity': op.toFixed(2), stroke: zero ? o.color : null, 'stroke-width': zero ? 1.5 : null }, svg);
         const html = `<div class="t">${mdy(t)}</div>` + (p ? `<div class="r"><span class="sw" style="background:${o.color}"></span><b class="num">${fmt(p.v, o.decimals)}${o.unit && agg !== 'count' ? ' ' + esc(o.unit) : ''}</b></div>${p.n > 1 ? `<div class="n">${p.n} entries</div>` : ''}` : '<div class="r muted">No entry</div>');
         rc.addEventListener('mousemove', ev => showTip(ev, html)); rc.addEventListener('mouseleave', hideTip);
         rc.addEventListener('touchstart', ev => showTip(ev, html), { passive: true });
@@ -336,12 +337,15 @@
         const t = new Date(y, mo, dd).getTime(), p = map.get(t);
         const out = (o.t0 != null && t < bStart(o.t0, 'day')) || t > endT;
         let st = '', cls = 'd' + (t === today ? ' today' : '') + (out ? ' out' : '');
-        if (p) {
+        if (p && p.v === 0) {   // a logged zero: shows "0", outlined in the metric color, not shaded like an event
+          st = `background:var(--surface);border:1.5px solid ${o.color};`;
+          cls += ' has zero';
+        } else if (p) {
           const k = Math.max(0, Math.min(1, (p.v - min) / ((max - min) || 1))), pct = Math.round(22 + 78 * k);
           st = `background:color-mix(in srgb,${o.color} ${pct}%,var(--surface));` + (pct > 55 ? 'color:#fff;' : '');
           cls += ' has';
         }
-        h += `<div class="${cls}" style="${st}" data-t="${t}"><i>${dd}</i>${p && showVal ? `<b class="num">${fmt(p.v, o.decimals)}</b>` : ''}</div>`;
+        h += `<div class="${cls}" style="${st}" data-t="${t}"><i>${dd}</i>${p && (showVal || p.v === 0) ? `<b class="num">${fmt(p.v, o.decimals)}</b>` : ''}</div>`;
       }
       h += '</div></div>';
     }
