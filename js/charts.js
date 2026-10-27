@@ -109,16 +109,22 @@
   // ---------- render ----------
   function render(host, o) {
     host._chart = o;
+    // svg charts fill whatever height their card gives them (cards in a row stretch to match)
+    const fill = !['calendar', 'monthcal', 'number'].includes(o.type) && o.entries.length > 0;
+    host.classList.toggle('fill', fill);
+    host.classList.toggle('flow', !fill);
+    host.style.minHeight = fill || o.type === 'number' ? (o.height || 220) + 'px' : '';
     if (!host._ro && window.ResizeObserver) {
-      let lastW = 0;
-      host._ro = new ResizeObserver(() => { const w = host.clientWidth; if (w && Math.abs(w - lastW) > 2) { lastW = w; draw(host, host._chart); } });
+      host._ro = new ResizeObserver(() => { const w = host.clientWidth, h = host.clientHeight;
+        if (w && (Math.abs(w - (host._lw || 0)) > 2 || (host.classList.contains('fill') && Math.abs(h - (host._lh || 0)) > 2))) { host._lw = w; host._lh = h; draw(host, host._chart); } });
       host._ro.observe(host);
     }
+    host._lw = host.clientWidth; host._lh = host.clientHeight;
     draw(host, o);
   }
 
   function draw(host, o) {
-    const W = Math.max(240, host.clientWidth || 600), Ht = o.height || 220;
+    const W = Math.max(240, host.clientWidth || 600), Ht = host.classList.contains('fill') ? Math.max(120, Math.floor(host.clientHeight) || o.height || 220) : (o.height || 220);
     const ents = o.entries;
     if (!ents.length) { host.innerHTML = '<div class="empty">No entries in this range yet</div>'; return; }
     if (o.type === 'calendar') return calendar(host, o, W);

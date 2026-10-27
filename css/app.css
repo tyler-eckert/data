@@ -121,6 +121,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .types button:hover{color:var(--text)}
 .types button.on{background:var(--surface);color:var(--brand-500);box-shadow:var(--shadow)}
 .chart{position:relative;width:100%;min-height:200px}
+#ovGrid .card{display:flex;flex-direction:column}
+#ovGrid .card>.chart{flex:1 1 auto}
+.chart.fill>svg{position:absolute;left:0;top:0}
+.chart.fill>.empty{position:absolute;inset:0;height:auto}
+.chart.flow{display:flex;flex-direction:column;justify-content:center;min-height:0}
+.chart.flow>.big-num{flex:1;height:auto;min-height:0}
+.mcal-wrap{width:100%}
 .chart svg{display:block;width:100%;overflow:visible}
 .chart text{font-family:var(--font);font-size:10.5px;fill:var(--axis)}
 .chart .gl{stroke:var(--grid);stroke-width:1}

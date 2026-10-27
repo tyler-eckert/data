@@ -368,7 +368,7 @@
     card.style.gridColumn = `span ${L.span}`;
     card.style.minHeight = '';
     card.dataset.extra = L.h || '';
-    card.style.alignSelf = L.h ? 'start' : '';
+    card.style.alignSelf = ''; card.style.height = '';
     card.classList.toggle('lay-hidden', !!(hid && LAY.edit));
     if (!LAY.edit) { card.removeAttribute('draggable'); return; }
     const ctl = document.createElement('div'); ctl.className = 'lay-ctl';
@@ -394,15 +394,25 @@
     // drag the bottom edge: charts stretch; snaps every 8px, to the cards beside it, and to its natural height
     const rh = document.createElement('div'); rh.className = 'lay-rh'; rh.title = 'Drag to change the height · double-click to reset'; card.appendChild(rh);
     rh.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); rh.setPointerCapture(e.pointerId);
-      card.style.alignSelf = 'start'; const r0 = card.getBoundingClientRect(), h0 = r0.height, e0 = +(card.dataset.extra || 0), base = h0 - e0, y0 = e.clientY;
-      const near = $$('#ovGrid .card').filter(x => x !== card && Math.abs(x.getBoundingClientRect().top - r0.top) < 40).map(x => { const a = x.style.alignSelf; x.style.alignSelf = 'start'; const h = x.getBoundingClientRect().height; x.style.alignSelf = a; return h; });
-      const mags = [...near, base]; let ex = e0; card.classList.add('lay-sizing'); document.body.classList.add('lay-dragging');
+      // what you see is what you get: a row is as tall as its tallest card, and every card in it (and its chart) fills that height
+      const natural = x => { const a = x.style.alignSelf; x.style.alignSelf = 'start'; const h = x.getBoundingClientRect().height; x.style.alignSelf = a; return h; };
+      const r0 = card.getBoundingClientRect(), h0 = r0.height, e0 = +(card.dataset.extra || 0), own = natural(card), base = own - e0, y0 = e.clientY;
+      const near = $$('#ovGrid .card').filter(x => x !== card && Math.abs(x.getBoundingClientRect().top - r0.top) < 40).map(natural);
+      const rowMin = near.length ? Math.max(...near) : 0;
+      let ex = e0; card.classList.add('lay-sizing'); document.body.classList.add('lay-dragging');
       const tag = document.createElement('div'); tag.className = 'lay-hl'; card.appendChild(tag);
-      rh.onpointermove = ev => { const t = Math.max(160, h0 + ev.clientY - y0), mg = mags.find(x => Math.abs(x - t) <= 12);
-        const tgt = mg != null ? Math.round(mg) : Math.round(t / 8) * 8; ex = Math.round(tgt - base); card.style.height = tgt + 'px'; card.style.overflow = 'hidden';
-        tag.textContent = mg != null ? (Math.abs(mg - base) < 1 ? 'Natural height' : 'Lined up with the next card') : (ex > 0 ? '+' : '') + ex + 'px'; };
-      rh.onpointerup = rh.onpointercancel = () => { rh.onpointermove = rh.onpointerup = rh.onpointercancel = null; card.classList.remove('lay-sizing'); document.body.classList.remove('lay-dragging'); card.style.overflow = ''; card.style.height = ''; tag.remove();
-        setLay(m, { h: Math.abs(ex) < 4 ? null : ex }); renderOverview(); }; };
+      rh.onpointermove = ev => { const t = Math.max(160, h0 + ev.clientY - y0);
+        let tgt, lab;
+        if (rowMin && t <= rowMin + 12) { tgt = rowMin; lab = 'Lined up with the card beside it'; }
+        else if (Math.abs(t - base) <= 12) { tgt = base; lab = 'Natural height'; }
+        else { tgt = Math.round(t / 8) * 8; lab = null; }
+        ex = Math.round(tgt - base);
+        card.style.height = Math.max(tgt, rowMin) + 'px';
+        tag.textContent = lab || (ex > 0 ? '+' : '') + ex + 'px'; };
+      rh.onpointerup = rh.onpointercancel = () => { rh.onpointermove = rh.onpointerup = rh.onpointercancel = null; card.classList.remove('lay-sizing'); document.body.classList.remove('lay-dragging'); tag.remove();
+        // lining up with the row = no extra of its own (the row stretch does it)
+        const lined = rowMin && Math.abs(base + ex - rowMin) < 1, keep = (lined && base <= rowMin) || Math.abs(ex) < 4 ? null : ex;
+        setLay(m, { h: keep }); renderOverview(); }; };
     rh.ondblclick = () => { setLay(m, { h: null }); renderOverview(); };
 
     // drag the handle to move (desktop)
@@ -451,8 +461,8 @@
       entries: ents, ymin: c.ymin, ymax: c.ymax, t0, t1: t0 == null ? null : t1, height: Math.max(120, (layOf(m).span >= 8 ? 260 : 220) + layOf(m).h) });
     applyLayout(m, card);
     const ex = layOf(m).h;
-    if (ex && ['number'].includes(c.type)) { const bn = $('.big-num', host); if (bn) bn.style.height = Math.max(120, 200 + ex) + 'px'; }
-    if (ex > 0 && ['calendar', 'monthcal'].includes(c.type)) requestAnimationFrame(() => { card.style.minHeight = ''; card.style.minHeight = (card.getBoundingClientRect().height + ex) + 'px'; });
+    // calendars size to their content, so extra height is added to the card itself
+    if (ex && host.classList.contains('flow') && c.type !== 'number') { const hb = [...host.children].reduce((t, x) => t + x.getBoundingClientRect().height, 0); host.style.minHeight = Math.max(0, hb + ex) + 'px'; }
     const set = (patch, full) => { m.chart = { ...c, ...patch }; full ? renderOverview() : renderCard(m, card); saveChart(m); };
     $$('.types [data-t]', card).forEach(b => b.onclick = () => set({ type: b.dataset.t }));
     $$('[data-b]', card).forEach(b => b.onclick = () => set({ bucket: b.dataset.b }));
