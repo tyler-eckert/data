@@ -103,10 +103,12 @@
     const cs = cats();
     a.innerHTML = `<div class="seg" id="rangeSeg">${RANGES.map(r => `<button data-r="${r[0]}" class="${S.range === r[0] ? 'on' : ''}">${r[1]}</button>`).join('')}</div>`
       + (cs.length ? `<select class="in sel" id="catSel"><option value="">All categories</option>${cs.map(c => `<option ${S.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : '')
-      + `<button class="btn" id="cardsBtn" title="Show or hide metric cards">${IC.cards}<span>Cards</span></button>`;
+      + `<button class="btn" id="cardsBtn" title="Show or hide metric cards">${IC.cards}<span>Cards</span></button>`
+      + `<button class="btn ${LAY.edit ? 'primary' : ''}" id="layoutBtn" title="Resize, rearrange or hide cards on this page">${svgI('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M10 9v12"/>')}<span>Layout</span></button>`;
     $$('#rangeSeg button').forEach(b => b.onclick = () => { S.range = b.dataset.r; store.set('data-range', S.range); renderTop(); renderOverview(); });
     const cSel = $('#catSel'); if (cSel) cSel.onchange = () => { S.cat = cSel.value; store.set('data-cat', S.cat); renderOverview(); };
     $('#cardsBtn').onclick = cardsModal;
+    $('#layoutBtn').onclick = () => { LAY.edit = !LAY.edit; renderTop(); renderOverview(); };
   }
 
   // =====================================================================
@@ -316,13 +318,103 @@
       <div class="card kpi c-3 kp"><div class="label">Current streak</div><div class="val num">${streak} <span class="muted" style="font-size:var(--fs-lg)">day${streak === 1 ? '' : 's'}</span></div><div class="delta muted">${S.entries.length ? 'Last entry ' + ago(S.entries[0].t) : '&nbsp;'}</div></div>`;
 
     const g = $('#ovGrid');
-    const ms = S.metrics.filter(m => !m.archived && !chartOf(m).hidden && (!S.cat || m.category === S.cat));
+    document.body.classList.toggle('lay-on', LAY.edit);
+    $('#layBanner')?.remove();
+    if (LAY.edit) {
+      const b = document.createElement('div'); b.className = 'lay-banner'; b.id = 'layBanner';
+      b.innerHTML = `${svgI('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M10 9v12"/>')}<span><b>Customizing this page on ${devKey() === 'phone' ? 'phones' : 'computers'}.</b> Drag the handle to move a card (arrows on a phone), drag its right or bottom edge (or use − / +) to resize it, the eye to hide it. Double-click an edge to reset it. Sizes are saved separately for phone and computer.</span><span style="margin-left:auto;display:flex;gap:8px"><button class="btn" id="layReset">Reset page</button><button class="btn primary" id="layDone">Done</button></span>`;
+      $('#p-overview').prepend(b);
+      $('#layDone').onclick = () => { LAY.edit = false; renderTop(); renderOverview(); toast('Layout saved'); };
+      $('#layReset').onclick = () => {
+        const dk = devKey(), was = S.metrics.map(m => [m, JSON.parse(JSON.stringify(m.chart || {}))]);
+        S.metrics.forEach(m => { const c = chartOf(m); if (c.lay && c.lay[dk]) { const lay = { ...c.lay }; delete lay[dk]; m.chart = { ...c, lay }; if (dk === 'desk') delete m.chart.span; saveChart(m); } });
+        renderOverview(); toast('Page layout reset', () => { was.forEach(([m, ch]) => { m.chart = ch; saveChart(m); }); renderOverview(); });
+      };
+    }
+    const ms = S.metrics.filter(m => !m.archived && (LAY.edit || !chartOf(m).hidden) && (!S.cat || m.category === S.cat));
     if (!ms.length) {
       g.innerHTML = `<div class="card c-12"><div class="empty-state"><h3>${S.metrics.length ? 'No cards to show' : 'Nothing to chart yet'}</h3><div>${S.metrics.length ? 'All metrics in this view are hidden. Use “Cards” to bring them back.' : 'Create a metric and log a few entries — each metric gets its own card here.'}</div><button class="btn primary" id="goEntry">${S.metrics.length ? 'Manage cards' : 'Go to data entry'}</button></div></div>`;
       $('#goEntry').onclick = S.metrics.length ? cardsModal : () => setPage('entry'); return;
     }
-    g.innerHTML = ms.map(m => `<div class="card c-${chartOf(m).span === 12 ? 12 : 6}" data-mc="${m.id}"></div>`).join('');
-    ms.forEach(m => renderCard(m, $(`[data-mc="${m.id}"]`, g)));
+    g.innerHTML = ms.map(m => `<div class="card" data-mc="${m.id}"></div>`).join('');
+    ms.forEach((m, i) => { const el = $(`[data-mc="${m.id}"]`, g), L = layOf(m); el.style.order = L.ord ?? 1000 + i; renderCard(m, el); });
+  }
+
+  // =====================================================================
+  // LAYOUT (same model as eckert.fin): per device (phone / computer) span on the 12-col grid,
+  // extra height in px, and order. Saved into each metric's chart settings, so it syncs everywhere.
+  // =====================================================================
+  const LAY = { edit: false };
+  const devKey = () => innerWidth <= 860 ? 'phone' : 'desk';
+  const SIZES = { desk: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12], phone: [4, 6, 12] };
+  const SIZE_NAME = n => ({ 2: '⅙', 3: '¼', 4: '⅓', 5: '5/12', 6: '½', 7: '7/12', 8: '⅔', 9: '¾', 10: '⅚', 12: 'Full' })[n] || n + '/12';
+  function layOf(m) {
+    const c = chartOf(m), dk = devKey(), L = (c.lay && c.lay[dk]) || {};
+    return { span: L.span || (dk === 'desk' ? (m.chart && m.chart.span) || 6 : 12), h: L.h || 0, ord: L.ord };
+  }
+  function setLay(m, patch) {
+    const c = chartOf(m), dk = devKey(), lay = { ...(c.lay || {}) };
+    lay[dk] = { ...(lay[dk] || {}), ...patch };
+    Object.keys(lay[dk]).forEach(k => lay[dk][k] == null && delete lay[dk][k]);
+    m.chart = { ...c, lay }; saveChart(m);
+  }
+  let DEV_NOW = devKey();
+  addEventListener('resize', () => { const d = devKey(); if (d !== DEV_NOW) { DEV_NOW = d; if (S.page === 'overview' && S.metrics.length) renderOverview(); } });
+  const visualOrder = () => $$('#ovGrid [data-mc]').map((c, i) => ({ id: c.dataset.mc, o: +c.style.order, i })).sort((a, b) => a.o - b.o || a.i - b.i).map(x => x.id);
+  function saveOrder(list) { list.forEach((id, i) => { const m = mById(id); if (m && layOf(m).ord !== i) setLay(m, { ord: i }); }); renderOverview(); }
+
+  function applyLayout(m, card) {
+    const L = layOf(m), dk = devKey(), hid = chartOf(m).hidden;
+    card.style.gridColumn = `span ${L.span}`;
+    card.style.minHeight = '';
+    card.dataset.extra = L.h || '';
+    card.style.alignSelf = L.h ? 'start' : '';
+    card.classList.toggle('lay-hidden', !!(hid && LAY.edit));
+    if (!LAY.edit) { card.removeAttribute('draggable'); return; }
+    const ctl = document.createElement('div'); ctl.className = 'lay-ctl';
+    ctl.innerHTML = `<button class="grip" title="Drag to move">${svgI('<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>')}</button><button data-mv="-1" title="Move earlier">${IC.up}</button><button data-mv="1" title="Move later">${IC.down}</button><button data-sz="-1" title="Smaller" class="sz">−</button><span class="sz-l">${SIZE_NAME(L.span)}</span><button data-sz="1" title="Larger" class="sz">+</button><button data-hd title="${hid ? 'Show' : 'Hide'}">${hid ? IC.hide : svgI('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>')}</button>`;
+    card.appendChild(ctl); ctl.onclick = e => e.stopPropagation();
+    $$('[data-mv]', ctl).forEach(b => b.onclick = () => { const list = visualOrder(), i = list.indexOf(m.id), j = i + +b.dataset.mv; if (j < 0 || j >= list.length) return; [list[i], list[j]] = [list[j], list[i]]; saveOrder(list); });
+    $$('[data-sz]', ctl).forEach(b => b.onclick = () => { const list = SIZES[dk], now = L.span;
+      const n = +b.dataset.sz > 0 ? (list.find(x => x > now) ?? list[list.length - 1]) : ([...list].reverse().find(x => x < now) ?? list[0]);
+      setLay(m, { span: n }); renderOverview(); });
+    $('[data-hd]', ctl).onclick = () => { m.chart = { ...chartOf(m), hidden: !hid }; saveChart(m); renderOverview(); };
+
+    // drag the right edge: snaps to the 12-column grid (whole steps on a phone)
+    const rs = document.createElement('div'); rs.className = 'lay-rs'; rs.title = 'Drag to resize · double-click to reset'; card.appendChild(rs);
+    rs.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); rs.setPointerCapture(e.pointerId);
+      const grid = card.parentElement, gap = parseFloat(getComputedStyle(grid).columnGap) || 0, colW = (grid.clientWidth - gap * 11) / 12, left = card.getBoundingClientRect().left;
+      const list = SIZES[dk], snap = n => list.reduce((b, x) => Math.abs(x - n) < Math.abs(b - n) ? x : b, list[0]);
+      let n = L.span; const tag = $('.sz-l', ctl); card.classList.add('lay-sizing'); document.body.classList.add('lay-dragging');
+      rs.onpointermove = ev => { n = snap(Math.max(1, Math.min(12, Math.round((ev.clientX - left + gap) / (colW + gap))))); card.style.gridColumn = `span ${n}`; tag.textContent = SIZE_NAME(n); };
+      rs.onpointerup = rs.onpointercancel = () => { rs.onpointermove = rs.onpointerup = rs.onpointercancel = null; card.classList.remove('lay-sizing'); document.body.classList.remove('lay-dragging');
+        if (n !== L.span) setLay(m, { span: n }); renderOverview(); }; };
+    rs.ondblclick = () => { setLay(m, { span: null }); renderOverview(); };
+
+    // drag the bottom edge: charts stretch; snaps every 8px, to the cards beside it, and to its natural height
+    const rh = document.createElement('div'); rh.className = 'lay-rh'; rh.title = 'Drag to change the height · double-click to reset'; card.appendChild(rh);
+    rh.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); rh.setPointerCapture(e.pointerId);
+      card.style.alignSelf = 'start'; const r0 = card.getBoundingClientRect(), h0 = r0.height, e0 = +(card.dataset.extra || 0), base = h0 - e0, y0 = e.clientY;
+      const near = $$('#ovGrid .card').filter(x => x !== card && Math.abs(x.getBoundingClientRect().top - r0.top) < 40).map(x => { const a = x.style.alignSelf; x.style.alignSelf = 'start'; const h = x.getBoundingClientRect().height; x.style.alignSelf = a; return h; });
+      const mags = [...near, base]; let ex = e0; card.classList.add('lay-sizing'); document.body.classList.add('lay-dragging');
+      const tag = document.createElement('div'); tag.className = 'lay-hl'; card.appendChild(tag);
+      rh.onpointermove = ev => { const t = Math.max(160, h0 + ev.clientY - y0), mg = mags.find(x => Math.abs(x - t) <= 12);
+        const tgt = mg != null ? Math.round(mg) : Math.round(t / 8) * 8; ex = Math.round(tgt - base); card.style.height = tgt + 'px'; card.style.overflow = 'hidden';
+        tag.textContent = mg != null ? (Math.abs(mg - base) < 1 ? 'Natural height' : 'Lined up with the next card') : (ex > 0 ? '+' : '') + ex + 'px'; };
+      rh.onpointerup = rh.onpointercancel = () => { rh.onpointermove = rh.onpointerup = rh.onpointercancel = null; card.classList.remove('lay-sizing'); document.body.classList.remove('lay-dragging'); card.style.overflow = ''; card.style.height = ''; tag.remove();
+        setLay(m, { h: Math.abs(ex) < 4 ? null : ex }); renderOverview(); }; };
+    rh.ondblclick = () => { setLay(m, { h: null }); renderOverview(); };
+
+    // drag the handle to move (desktop)
+    const grip = $('.grip', ctl);
+    grip.onmousedown = grip.ontouchstart = () => card.setAttribute('draggable', 'true');
+    card.ondragstart = e => { e.dataTransfer.setData('text/plain', m.id); e.dataTransfer.effectAllowed = 'move'; };
+    card.ondragend = () => card.removeAttribute('draggable');
+    card.ondragover = e => { e.preventDefault(); card.classList.add('lay-drop'); };
+    card.ondragleave = () => card.classList.remove('lay-drop');
+    card.ondrop = e => { e.preventDefault(); card.classList.remove('lay-drop'); const from = e.dataTransfer.getData('text/plain'); if (!from || from === m.id) return;
+      const r = card.getBoundingClientRect(), after = (e.clientY - r.top) > r.height / 2 || (e.clientX - r.left) > r.width * .66;
+      const list = visualOrder().filter(k => k !== from); list.splice(list.indexOf(m.id) + (after ? 1 : 0), 0, from); saveOrder(list); };
   }
 
   function renderCard(m, card) {
@@ -341,7 +433,7 @@
     const hasAxis = c.ymin != null || c.ymax != null, axOpen = !noAxis && (hasAxis || axisOpen.has(m.id));
     card.innerHTML = `
       <div class="card-h"><div><h3><span class="sw" style="background:${m.color}"></span>${esc(m.name)}</h3><div class="sub">${[m.category, latest ? 'Last logged ' + ago(latest.t) : 'No entries yet'].filter(Boolean).map(esc).join(' · ')}</div></div>
-        <div class="right"><button class="icon-btn" data-a="wide" title="${c.span === 12 ? 'Half width' : 'Full width'}">${IC.wide}</button><button class="icon-btn" data-a="hide" title="Hide card">${IC.hide}</button><button class="icon-btn" data-a="edit" title="Metric settings">${IC.gear}</button></div></div>
+        <div class="right"><button class="icon-btn" data-a="hide" title="Hide card">${IC.hide}</button><button class="icon-btn" data-a="edit" title="Metric settings">${IC.gear}</button></div></div>
       <div class="mc-stats">
         <div class="mc-stat"><div class="l">Latest</div><div class="v num">${latest ? (latest.v == null ? '✓' : fmt(+latest.v, m.decimals)) + (latest.v == null ? '' : u()) : '—'}</div><div class="s">${latest ? mdy(latest.t) : '&nbsp;'}</div></div>
         <div class="mc-stat"><div class="l">${rShort} ${AGG_SHORT[agg]}</div><div class="v num">${fmt(cur, agg === 'count' ? 0 : m.decimals)}${cur == null ? '' : u(agg)}</div><div class="s">${dlt == null || !isFinite(dlt) ? `${ents.length} entr${ents.length === 1 ? 'y' : 'ies'}` : `<span class="chip ${dlt >= 0 ? 'pos' : 'neg'}">${dlt >= 0 ? '▲' : '▼'} ${Math.abs(dlt * 100).toFixed(1)}%</span> vs prior`}</div></div>
@@ -356,7 +448,11 @@
       </div>`;
     const host = $('.chart', card);
     Charts.render(host, { type: c.type, bucket: c.bucket, agg: c.agg, color: m.color, unit: m.unit, decimals: m.decimals,
-      entries: ents, ymin: c.ymin, ymax: c.ymax, t0, t1: t0 == null ? null : t1, height: c.span === 12 ? 260 : 220 });
+      entries: ents, ymin: c.ymin, ymax: c.ymax, t0, t1: t0 == null ? null : t1, height: Math.max(120, (layOf(m).span >= 8 ? 260 : 220) + layOf(m).h) });
+    applyLayout(m, card);
+    const ex = layOf(m).h;
+    if (ex && ['number'].includes(c.type)) { const bn = $('.big-num', host); if (bn) bn.style.height = Math.max(120, 200 + ex) + 'px'; }
+    if (ex > 0 && ['calendar', 'monthcal'].includes(c.type)) requestAnimationFrame(() => { card.style.minHeight = ''; card.style.minHeight = (card.getBoundingClientRect().height + ex) + 'px'; });
     const set = (patch, full) => { m.chart = { ...c, ...patch }; full ? renderOverview() : renderCard(m, card); saveChart(m); };
     $$('.types [data-t]', card).forEach(b => b.onclick = () => set({ type: b.dataset.t }));
     $$('[data-b]', card).forEach(b => b.onclick = () => set({ bucket: b.dataset.b }));
@@ -368,7 +464,6 @@
       i.onchange = apply; i.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } };
     });
     const au = $('[data-a=auto]', card); if (au) au.onclick = () => { axisOpen.delete(m.id); set({ ymin: null, ymax: null }); };
-    $('[data-a=wide]', card).onclick = () => set({ span: c.span === 12 ? 6 : 12 }, true);
     $('[data-a=hide]', card).onclick = () => { set({ hidden: true }, true); toast(`Hid ${esc(m.name)}`, () => set({ hidden: false }, true)); };
     $('[data-a=edit]', card).onclick = () => metricModal(m, () => renderOverview());
   }

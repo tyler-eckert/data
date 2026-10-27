@@ -224,6 +224,32 @@ select.in{padding-right:28px;-webkit-appearance:none;appearance:none;background-
 
 .tabbar,.mob-only{display:none}
 
+/* ---------- layout editing (same as eckert.fin) ---------- */
+.lay-ctl{position:absolute;top:8px;right:8px;z-index:6;display:flex;gap:4px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-sm);padding:3px;box-shadow:var(--shadow)}
+.lay-ctl button{width:28px;height:28px;border-radius:var(--r-xs);display:grid;place-items:center;color:var(--text-2)}
+.lay-ctl button:hover{background:var(--surface-3);color:var(--text)}
+.lay-ctl svg{width:16px;height:16px}
+.lay-ctl .grip{cursor:grab}
+.lay-ctl .sz{font-weight:700;font-size:var(--fs-md);line-height:1;width:26px}
+.lay-ctl .sz-l{font-size:var(--fs-xs);font-weight:600;color:var(--text-2);min-width:30px;text-align:center;align-self:center}
+body.lay-on #ovGrid .card{outline:1.5px dashed var(--border-strong);outline-offset:3px}
+body.lay-on .card.lay-hidden{opacity:.35}
+body.lay-on .card.lay-hidden .lay-ctl{opacity:1}
+.card.lay-drop{outline:2px solid var(--brand-500)!important}
+.lay-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--brand-100);color:var(--text);border-radius:var(--r-md);padding:10px 14px;margin-bottom:16px;font-size:var(--fs-base)}
+.lay-banner .btn{height:32px}
+.lay-banner>svg{width:18px;height:18px;flex:none;color:var(--brand-500)}
+.lay-rs{position:absolute;top:12px;bottom:12px;right:0;width:10px;cursor:ew-resize;z-index:7;touch-action:none}
+.lay-rs::after{content:'';position:absolute;top:50%;left:3px;width:4px;height:44px;transform:translateY(-50%);border-radius:3px;background:var(--brand-500);opacity:.55}
+.lay-rh{position:absolute;left:12px;right:12px;bottom:0;height:10px;cursor:ns-resize;z-index:7;touch-action:none}
+.lay-rh::after{content:'';position:absolute;left:50%;top:3px;height:4px;width:44px;transform:translateX(-50%);border-radius:3px;background:var(--brand-500);opacity:.55}
+.lay-rs:hover::after,.lay-rh:hover::after,.lay-sizing .lay-rs::after,.lay-sizing .lay-rh::after{opacity:1}
+.lay-sizing{outline:2px dashed var(--brand-500)!important;outline-offset:3px}
+.lay-hl{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:var(--brand-500);color:#fff;font-size:var(--fs-xs);font-weight:700;padding:3px 8px;border-radius:var(--r-xs);z-index:8;pointer-events:none;white-space:nowrap}
+.lay-ctl .grip,.lay-rs,.lay-rh{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.lay-dragging{overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none}
+body.lay-on .tabbar{display:none}
+
 /* ---------- mobile ---------- */
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -252,4 +278,8 @@ select.in{padding-right:28px;-webkit-appearance:none;appearance:none;background-
   .tabbar button svg{width:20px;height:20px}
   .tabbar button.active{color:var(--brand-500);background:var(--brand-100)}
   .toast{bottom:calc(96px + env(safe-area-inset-bottom))}
+  body.lay-on .main{padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+  .lay-ctl .grip,.lay-ctl button{width:34px;height:34px}
+  .lay-rs{width:22px;right:-2px}.lay-rh{height:22px;bottom:-2px}
+  .lay-rs::after{left:9px}.lay-rh::after{top:9px}
 }
